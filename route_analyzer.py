@@ -19,6 +19,30 @@ from points import points
 # Инициализация клиента OpenRouteService
 client = openrouteservice.Client(key=orskey)
 
+def compute_center_from_points(points_dict):
+    """
+    Вычисляет средние координаты (центр) по всем точкам.
+
+    Возвращает список вида [lat, lon]. Если список пуст, возвращает [0, 0].
+    """
+    if not points_dict:
+        return [0, 0]
+
+    latitudes = []
+    longitudes = []
+    for coords in points_dict.values():
+        # Ожидаем формат [lat, lon]
+        if isinstance(coords, (list, tuple)) and len(coords) == 2:
+            latitudes.append(coords[0])
+            longitudes.append(coords[1])
+
+    if not latitudes or not longitudes:
+        return [0, 0]
+
+    center_lat = sum(latitudes) / len(latitudes)
+    center_lon = sum(longitudes) / len(longitudes)
+    return [center_lat, center_lon]
+
 def get_distance_truck(coord1, coord2, max_attempts=5):
     """
     Получение расстояния между двумя точками для грузовика
@@ -137,8 +161,9 @@ def create_route_map():
     """
     Создание интерактивной карты с маршрутами между всеми точками
     """
-    # Создаём карту с центром на складе
-    m = folium.Map(location=points["Склад"], zoom_start=14)
+    # Создаём карту с центром, вычисленным по всем точкам
+    center = compute_center_from_points(points)
+    m = folium.Map(location=center, zoom_start=12)
 
     # Добавляем маркеры
     for name, coords in points.items():
