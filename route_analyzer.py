@@ -248,3 +248,63 @@ def _process_route_pair(pair_data):
     except Exception as e:
         print(f"⚠️ Ошибка для {name1} ↔ {name2}: {e}")
         return name1, name2, None, False
+
+def create_route_map(max_workers=2):
+    """
+    Создание интерактивной карты с маршрутами между всеми точками
+    """
+    # Загружаем кэш при старте
+    _load_cache()
+    
+    # Создаём карту с центром, вычисленным по всем точкам
+    center = compute_center_from_points(points)
+    m = folium.Map(location=center, zoom_start=12)
+
+    # Добавляем маркеры
+    for name, coords in points.items():
+        folium.Marker(coords, popup=name).add_to(m)
+
+    # Подготовка пар маршрутов для обработки
+    route_pairs = list(itertools.combinations(points.items(), 2))
+    total_routes = len(route_pairs)
+    
+    print(f"🗺️ Построение {total_routes} маршрутов на карте")
+    
+    # Обработка маршрутов с ограниченным числом потоков
+    processed = 0
+    
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Подготовка задач с номерами для отслеживания прогресса
+        tasks = []
+        for i, ((name1, coords1), (name2, coords2)) in enumerate(route_pairs, 1):
+            tasks.append(((name1, coords1), (name2, coords2), i, total_routes))
+        
+        # Отправляем задачи на выполнение
+        future_to_task = {executor.submit(_process_route_pair, task): task for task in tasks}
+        
+        for future in as_completed(future_to_task):
+            try:
+                name1, name2, route_coords, success = future.result()
+                
+                if success and route_coords:
+                    folium.PolyLine(
+                        locations=route_coords,
+                        color="blue", weight=1, opacity=0.5
+                    ).add_to(m)
+                
+                processed += 1
+                
+                # Периодическое сохранение кэша
+                if processed % 5 == 0:
+                    _save_cache()
+                    print(f"Прогресс {processed}/{total_routes}")
+                
+            except Exception as e:
+                print(f"⚠️ Ошибка обработки маршрута: {e}")
+                processed += 1
+
+    # Финальное сохранение кэша и карты
+    _save_cache()
+    m.save("all_routes_map.html")
+    print("✅ Карта сохранена в all_routes_map.html")
+    return m
