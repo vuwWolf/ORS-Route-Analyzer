@@ -56,3 +56,61 @@ def _save_cache():
                 json.dump(route_cache, f)
         except Exception as e:
             print(f"⚠️ Ошибка сохранения кэша: {e}")
+
+def get_distance_truck(coord1, coord2, max_attempts=3):
+    """
+    Получение расстояния между двумя точками для грузовика
+    
+    Args:
+        coord1: Координаты первой точки (lat, lon)
+        coord2: Координаты второй точки (lat, lon)
+        max_attempts: Максимальное количество попыток
+    
+    Returns:
+        float: Расстояние в километрах или None при ошибке
+    """
+    # Проверяем кэш
+    cache_key = _get_cache_key(coord1, coord2)
+    with cache_lock:
+        if cache_key in distance_cache:
+            return distance_cache[cache_key]
+    
+    for attempt in range(max_attempts):
+        try:
+            # Подавляем предупреждения о rate limit
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", UserWarning)
+                route = client.directions(
+                    coordinates=[coord1[::-1], coord2[::-1]],  # ORS ждёт (lon, lat)
+                    profile='driving-hgv',
+                    format='geojson'
+                )
+
+            dist_m = route['features'][0]['properties']['segments'][0]['distance']
+            dist_km = round(dist_m / 1000, 2)
+            
+            # Сохраняем в кэш
+            with cache_lock:
+                distance_cache[cache_key] = dist_km
+            
+            return dist_km
+
+        except ApiError as e:
+            msg = str(e).lower()
+            if "rate limit" in msg:
+                wait = min(15, (attempt + 1) * 5)  # Уменьшаем время ожидания
+                print(f"⚠️ Лимит API превышен, ждём {wait} сек... (попытка {attempt + 1}/{max_attempts})")
+                time.sleep(wait)
+                continue
+            elif "could not find routable point" in msg:
+                print(f"❌ Не удалось построить маршрут {coord1} → {coord2}")
+                return None
+            else:
+                print(f"❌ Ошибка API: {e}")
+                return None
+        except Exception as e:
+            print(f"⚠️ Неожиданная ошибка {e}, попытка {attempt + 1}")
+            time.sleep(2)  # Уменьшаем время ожидания
+            continue
+    print("🚫 Не удалось получить маршрут после всех попыток")
+    return None
