@@ -129,3 +129,87 @@ def _process_distance_pair(pair_data):
     else:
         print(f"⚠️ Пропущено {name_i} ↔ {name_j}")
         return i, j, "-"
+
+def build_distance_matrix(max_workers=3):
+    """
+    Построение матрицы расстояний между всеми точками
+    """
+    # Загружаем кэш при старте
+    _load_cache()
+    
+    names = list(points.keys())
+    n = len(names)
+
+    # Создаём DataFrame и ставим диагональ "X"
+    dist_df = pd.DataFrame(index=names, columns=names, dtype=object)
+    for i in range(n):
+        dist_df.iloc[i, i] = "X"
+
+    # Загружаем частично сохранённую матрицу, если есть
+    try:
+        existing = pd.read_csv("distance_matrix_partial.csv", index_col=0)
+        for i in existing.index:
+            dist_df.loc[i, existing.columns] = existing.loc[i]
+        print("🔹 Загружены частично сохранённые данные.")
+    except FileNotFoundError:
+        pass
+
+    # Подготовка пар для обработки
+    pairs_to_process = []
+    for i in range(n):
+        for j in range(i+1, n):
+            if pd.isna(dist_df.iloc[i, j]) or dist_df.iloc[i, j] in ["-", ""]:
+                pairs_to_process.append((i, j, names, points))
+    
+    total = len(pairs_to_process)
+    if total == 0:
+        print("✅ Все расстояния уже рассчитаны")
+        return dist_df
+    
+    print(f"📊 Нужно обработать {total} пар точек")
+    
+    # Параллельная обработка с ограниченным числом потоков
+    done = 0
+    save_counter = 0
+    
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Отправляем задачи на выполнение
+        future_to_pair = {executor.submit(_process_distance_pair, pair): pair for pair in pairs_to_process}
+        
+        for future in as_completed(future_to_pair):
+            try:
+                i, j, result = future.result()
+                dist_df.iloc[i, j] = result
+                dist_df.iloc[j, i] = result
+                
+                done += 1
+                save_counter += 1
+                
+                # Сохраняем прогресс каждые 5 обработанных пар
+                if save_counter >= 5:
+                    dist_df.to_csv("distance_matrix_partial.csv", encoding="utf-8-sig")
+                    print(f"Прогресс {done}/{total} сохранён")
+                    save_counter = 0
+                    # Краткая пауза для сохранения кэша
+                    _save_cache()
+                
+            except Exception as e:
+                print(f"⚠️ Ошибка обработки пары: {e}")
+                done += 1
+
+    # Финальное сохранение
+    dist_df.to_csv("distance_matrix_partial.csv", encoding="utf-8-sig")
+    _save_cache()  # Сохраняем кэш в конце
+    
+    # Финальное сохранение в Excel с защитой от блокировки
+    outfile = "distance_matrix.xlsx"
+    for i in range(5):  # Уменьшаем количество попыток
+        try:
+            dist_df.to_excel(outfile, index=True)
+            print(f"\n✅ Финальная матрица сохранена в {outfile}")
+            break
+        except PermissionError:
+            print(f"⚠️ Файл {outfile} открыт. Сохраняем как новую версию.")
+            outfile = f"distance_matrix_{i+1}.xlsx"
+
+    return dist_df
