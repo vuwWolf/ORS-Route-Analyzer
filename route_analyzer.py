@@ -308,3 +308,44 @@ def create_route_map(max_workers=2):
     m.save("all_routes_map.html")
     print("✅ Карта сохранена в all_routes_map.html")
     return m
+
+def main():
+    """
+    Основная функция с поддержкой аргументов командной строки
+    """
+    parser = argparse.ArgumentParser(description='Route Analyzer - Анализ маршрутов и построение карт')
+    parser.add_argument('--mode', choices=['map', 'matrix', 'both'], default='both',
+                       help='Режим работы: map (только карта), matrix (только матрица), both (оба)')
+    parser.add_argument('--clean', action='store_true',
+                       help='Очистить временные файлы перед началом')
+    parser.add_argument('--workers-matrix', type=int, default=3,
+                       help='Количество потоков для матрицы расстояний (по умолчанию: 3)')
+    parser.add_argument('--workers-map', type=int, default=2,
+                       help='Количество потоков для построения карты (по умолчанию: 2)')
+    
+    args = parser.parse_args()
+    
+    if args.clean:
+        # Очистка временных файлов
+        temp_files = ['distance_matrix_partial.csv', 'all_routes_map.html', 'distance_matrix.xlsx',
+                     'distance_cache.json', 'route_cache.json']
+        for file in temp_files:
+            if os.path.exists(file):
+                os.remove(file)
+                print(f"🗑️ Удален файл: {file}")
+    
+    print("🚀 Запуск Route Analyzer")
+    print(f"📊 Точки для анализа: {len(points)}")
+    
+    if args.mode in ['map', 'both']:
+        print("\n🗺️ Создание карты маршрутов...")
+        create_route_map(max_workers=args.workers_map)
+    
+    if args.mode in ['matrix', 'both']:
+        print("\n📈 Построение матрицы расстояний...")
+        build_distance_matrix(max_workers=args.workers_matrix)
+    
+    print("\n✅ Анализ завершен!")
+
+if __name__ == "__main__":
+    main()
