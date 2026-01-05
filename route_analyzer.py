@@ -28,3 +28,31 @@ client = openrouteservice.Client(key=orskey)
 cache_lock = Lock()
 distance_cache = {}
 route_cache = {}
+
+def _get_cache_key(coord1, coord2):
+    """Генерирует уникальный ключ для кэша на основе координат"""
+    coord_str = f"{coord1[0]:.6f},{coord1[1]:.6f}-{coord2[0]:.6f},{coord2[1]:.6f}"
+    return hashlib.md5(coord_str.encode()).hexdigest()
+
+def _load_cache():
+    """Загружает кэш из файла"""
+    global distance_cache, route_cache
+    try:
+        with open('distance_cache.json', 'r') as f:
+            distance_cache = json.load(f)
+        with open('route_cache.json', 'r') as f:
+            route_cache = json.load(f)
+        print(f"📦 Загружено {len(distance_cache)} расстояний и {len(route_cache)} маршрутов из кэша")
+    except FileNotFoundError:
+        print("📦 Кэш не найден, начинаем с чистого листа")
+
+def _save_cache():
+    """Сохраняет кэш в файл"""
+    with cache_lock:
+        try:
+            with open('distance_cache.json', 'w') as f:
+                json.dump(distance_cache, f)
+            with open('route_cache.json', 'w') as f:
+                json.dump(route_cache, f)
+        except Exception as e:
+            print(f"⚠️ Ошибка сохранения кэша: {e}")
