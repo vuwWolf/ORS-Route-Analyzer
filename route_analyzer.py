@@ -213,3 +213,38 @@ def build_distance_matrix(max_workers=3):
             outfile = f"distance_matrix_{i+1}.xlsx"
 
     return dist_df
+
+def _process_route_pair(pair_data):
+    """Обрабатывает одну пару точек для построения маршрута на карте"""
+    (name1, coords1), (name2, coords2), current_route, total_routes = pair_data
+    
+    print(f"Обработка маршрута {current_route}/{total_routes}: {name1} ↔ {name2}")
+    
+    # Проверяем кэш маршрутов
+    cache_key = _get_cache_key(coords1, coords2)
+    with cache_lock:
+        if cache_key in route_cache:
+            route_data = route_cache[cache_key]
+            return name1, name2, route_data, True
+    
+    try:
+        # Подавляем предупреждения о rate limit
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            route = client.directions(
+                coordinates=[coords1[::-1], coords2[::-1]],  # ORS ждёт (lon, lat)
+                profile='driving-hgv',
+                format='geojson'
+            )
+        
+        # Сохраняем маршрут в кэш
+        route_coords = [list(reversed(coord)) for coord in route['features'][0]['geometry']['coordinates']]
+        with cache_lock:
+            route_cache[cache_key] = route_coords
+        
+        print(f"✅ Маршрут {name1} ↔ {name2} добавлен")
+        return name1, name2, route_coords, True
+        
+    except Exception as e:
+        print(f"⚠️ Ошибка для {name1} ↔ {name2}: {e}")
+        return name1, name2, None, False
