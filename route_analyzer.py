@@ -29,6 +29,30 @@ cache_lock = Lock()
 distance_cache = {}
 route_cache = {}
 
+def compute_center_from_points(points_dict):
+    """
+    Вычисляет средние координаты (центр) по всем точкам.
+
+    Возвращает список вида [lat, lon]. Если список пуст, возвращает [0, 0].
+    """
+    if not points_dict:
+        return [0, 0]
+
+    latitudes = []
+    longitudes = []
+    for coords in points_dict.values():
+        # Ожидаем формат [lat, lon]
+        if isinstance(coords, (list, tuple)) and len(coords) == 2:
+            latitudes.append(coords[0])
+            longitudes.append(coords[1])
+
+    if not latitudes or not longitudes:
+        return [0, 0]
+
+    center_lat = sum(latitudes) / len(latitudes)
+    center_lon = sum(longitudes) / len(longitudes)
+    return [center_lat, center_lon]
+
 def _get_cache_key(coord1, coord2):
     """Генерирует уникальный ключ для кэша на основе координат"""
     coord_str = f"{coord1[0]:.6f},{coord1[1]:.6f}-{coord2[0]:.6f},{coord2[1]:.6f}"
