@@ -114,3 +114,18 @@ def get_distance_truck(coord1, coord2, max_attempts=3):
             continue
     print("🚫 Не удалось получить маршрут после всех попыток")
     return None
+
+def _process_distance_pair(pair_data):
+    """Обрабатывает одну пару точек для матрицы расстояний"""
+    i, j, names, points_data = pair_data
+    name_i, name_j = names[i], names[j]
+    coord_i, coord_j = points_data[name_i], points_data[name_j]
+    
+    dist = get_distance_truck(coord_i, coord_j)
+    
+    if dist is not None:
+        print(f"{name_i} ↔ {name_j}: {dist:.2f} км")
+        return i, j, dist
+    else:
+        print(f"⚠️ Пропущено {name_i} ↔ {name_j}")
+        return i, j, "-"
